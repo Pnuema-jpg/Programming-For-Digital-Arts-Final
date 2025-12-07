@@ -7,6 +7,20 @@ from pygame.locals import QUIT
 import math
 
 
+
+
+
+
+
+
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        
+
+
+
 pygame.init()
 # create window
 screen = pygame.display.set_mode((800, 600))
@@ -21,3 +35,5 @@ while True:
             pygame.quit()
             sys.exit()
     screen.blit(background, (0, 0))
+    pygame.display.update()
+    clock.tick(60)
