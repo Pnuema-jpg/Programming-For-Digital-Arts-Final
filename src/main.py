@@ -21,9 +21,21 @@ background = pygame.image.load("background.png").convert()
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.image = pygame.image.load("player.png").convert_alpha()
         self.pos = pygame.math.Vector2(400, 300)
+        self.image = pygame.image.load("player.png").convert_alpha()
+        self.base_image = self.image
+        self.hitbox = self.image.get_rect(center = self.pos)
+        self.rect = self.hitbox.copy()
         self.speed = 5
+
+    def player_rotate(self):
+        self.mouse_pos = pygame.mouse.get_pos()
+        self.x_change = self.mouse_pos[0] - self.pos.x
+        self.y_change = self.mouse_pos[1] - self.pos.y
+        self.angle = math.degrees(math.atan2(-self.y_change, self.x_change))
+        self.image = pygame.transform.rotate(self.base_image, self.angle)
+        self.rect = self.image.get_rect(center=self.hitbox.center)
+    
     def user_input(self):
         self.velocity_x = 0
         self.velocity_y = 0
@@ -42,10 +54,12 @@ class Player(pygame.sprite.Sprite):
             self.velocity_y = 0
     def move(self):
         self.pos += pygame.math.Vector2(self.velocity_x, self.velocity_y)
+        self.hitbox.center = (round(self.pos.x), round(self.pos.y))
+        self.rect.center = self.hitbox.center
     def update(self):
         self.user_input()
         self.move()
-    
+        self.player_rotate()
 
 player1 = Player()
         
@@ -59,7 +73,9 @@ while True:
             pygame.quit()
             sys.exit()
     screen.blit(background, (0, 0))
-    screen.blit(player1.image, player1.pos)
+    screen.blit(player1.image, player1.rect)
     player1.update()
+    pygame.draw.rect(screen, (255, 0, 0), player1.hitbox, 2)
+    pygame.draw.rect(screen , (0, 255, 0), player1.rect, 2)
     pygame.display.update()
     clock.tick(60)
