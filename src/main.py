@@ -23,10 +23,13 @@ class Player(pygame.sprite.Sprite):
         super().__init__()
         self.pos = pygame.math.Vector2(400, 300)
         self.image = pygame.image.load("player.png").convert_alpha()
+        # Scale the image 1.25x bigger
+        original_size = self.image.get_size()
+        self.image = pygame.transform.scale(self.image, (int(original_size[0] * 1.25), int(original_size[1] * 1.25)))
         self.base_image = self.image
         self.hitbox = self.image.get_rect(center = self.pos)
         self.rect = self.hitbox.copy()
-        self.speed = 5
+        self.speed = 2.5
         self.swordbeam_cooldown = 0
         self.swordbeam = False
 
@@ -62,7 +65,7 @@ class Player(pygame.sprite.Sprite):
     def create_swordbeam(self):
         if self.swordbeam_cooldown == 0:
             self.swordbeam_cooldown = 50
-            self.beam = Beam(self.pos.x, self.pos.y, self.angle)
+            self.beam = Beam(self.hitbox.centerx, self.hitbox.centery, self.angle)
             all_sprites.add(self.beam)
             beam_group.add(self.beam)
 
@@ -90,9 +93,9 @@ class Beam(pygame.sprite.Sprite):
         self.num_frames = self.spritesheet.get_width() // self.frame_width
         self.update_image()
         self.rect = self.image.get_rect()
-        self.rect.center = (x,y)
         self.x = x
         self.y = y
+        self.rect.center = (self.x, self.y)
         self.speed = 10
         self.velocity = pygame.math.Vector2(self.speed, 0).rotate(-self.angle)
     
@@ -102,14 +105,15 @@ class Beam(pygame.sprite.Sprite):
         frame_y = 0
         frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
         frame_image = self.spritesheet.subsurface(frame_rect).copy()
+        # Scale up 2x before rotating
+        frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
         # Rotate the frame
         self.image = pygame.transform.rotate(frame_image, self.angle)
     
     def beam_movement(self):
         self.x += self.velocity.x
         self.y += self.velocity.y
-        self.rect.x = int(self.x)
-        self.rect.y = int(self.y)
+        self.rect.center = (int(self.x), int(self.y))
         
         # Animate frames (loops automatically with modulo)
         self.frame += self.animation_speed
