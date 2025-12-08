@@ -5,6 +5,7 @@ import random
 from sys import exit
 from pygame.locals import QUIT
 import math
+import colorsys
 
 
 
@@ -16,6 +17,50 @@ screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Photon Edge")
 clock = pygame.time.Clock()
 background = pygame.image.load("background.png").convert()
+
+
+def shift_hue(surface, hue_shift):
+    """Shift the hue of a surface by the given amount (0-360 degrees)"""
+    # Convert hue shift to 0-1 range
+    hue_shift = hue_shift / 360.0
+    
+    # Lock the surface for pixel access
+    surface.lock()
+    
+    # Create a copy to modify
+    result = surface.copy()
+    result.lock()
+    
+    # Get the color at each pixel and shift its hue
+    for y in range(result.get_height()):
+        for x in range(result.get_width()):
+            color = result.get_at((x, y))
+            
+            # Skip transparent pixels
+            if color.a == 0:
+                continue
+            
+            r = color.r / 255.0
+            g = color.g / 255.0
+            b = color.b / 255.0
+            a = color.a
+            
+            # Convert RGB to HSV
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            
+            # Shift hue
+            h = (h + hue_shift) % 1.0
+            
+            # Convert back to RGB
+            new_r, new_g, new_b = colorsys.hsv_to_rgb(h, s, v)
+            
+            new_color = (int(new_r * 255), int(new_g * 255), int(new_b * 255), a)
+            result.set_at((x, y), new_color)
+    
+    result.unlock()
+    surface.unlock()
+    
+    return result
 
 
 class Wall(pygame.sprite.Sprite):
@@ -45,6 +90,8 @@ class Player(pygame.sprite.Sprite):
         self.angle = 0
         self.velocity_x = 0
         self.velocity_y = 0
+        self.health = 100
+        self.damage_cooldown = 0
 
     def player_rotate(self):
         # Rotate based on movement direction from WASD
@@ -78,9 +125,9 @@ class Player(pygame.sprite.Sprite):
     def create_swordbeam(self):
         if self.swordbeam_cooldown == 0:
             self.swordbeam_cooldown = 50
-            self.beam = Beam(self.hitbox.centerx, self.hitbox.centery, self.angle)
+            self.beam = PlayerBeam(self.hitbox.centerx, self.hitbox.centery, self.angle)
             all_sprites.add(self.beam)
-            beam_group.add(self.beam)
+            player_beam_group.add(self.beam)
 
     def move(self):
         self.pos += pygame.math.Vector2(self.velocity_x, self.velocity_y)
@@ -91,17 +138,29 @@ class Player(pygame.sprite.Sprite):
             self.hitbox.center = (round(self.pos.x), round(self.pos.y))
         
         self.rect.center = self.hitbox.center
+    
+    def check_damage(self):
+        # Check if hit by enemy beams
+        hit_beams = pygame.sprite.spritecollide(self, enemy_beam_group, True)
+        if hit_beams and self.damage_cooldown <= 0:
+            self.health -= 10
+            self.damage_cooldown = 30  # Invincibility frame of 30 frames
+    
     def update(self):
         self.user_input()
         self.move()
+        self.check_damage()
         self.player_rotate()
         if self.swordbeam_cooldown > 0:
             self.swordbeam_cooldown -= 1
+        if self.damage_cooldown > 0:
+            self.damage_cooldown -= 1
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, pos):
         super().__init__(enemy_group, all_sprites)
-        self.image = pygame.image.load("enemy1.png").convert_alpha()
-        self.image = pygame.transform.rotozoom(self.image, 0, 1.5)
+        self.base_image = pygame.image.load("enemy1.png").convert_alpha()
+        self.base_image = pygame.transform.rotozoom(self.base_image, 0, 1.5)
+        self.image = self.base_image
         self.position = pygame.math.Vector2(pos)
         self.rect = self.image.get_rect(center=self.position)
         self.direction = pygame.math.Vector2()
@@ -109,6 +168,7 @@ class Enemy(pygame.sprite.Sprite):
         self.speed = 2
         self.shoot_cooldown = 0
         self.shoot_interval = 60  # Shoot every 60 frames (1 second at 60 FPS)
+        self.angle = 0
 
     def chasing(self):
         # Calculate direction to player
@@ -123,18 +183,26 @@ class Enemy(pygame.sprite.Sprite):
             # Move left or right
             if distance_vector.x > 0:
                 self.direction = pygame.math.Vector2(1, 0)  # Right
+                self.angle = 0
             else:
                 self.direction = pygame.math.Vector2(-1, 0)  # Left
+                self.angle = 180
         else:
             # Move up or down
             if distance_vector.y > 0:
                 self.direction = pygame.math.Vector2(0, 1)  # Down
+                self.angle = -90
             else:
                 self.direction = pygame.math.Vector2(0, -1)  # Up
+                self.angle = 90
         
         self.velocity = self.direction * self.speed
         self.position += self.velocity
         self.rect.center = self.position
+        
+        # Rotate sprite based on direction
+        self.image = pygame.transform.rotate(self.base_image, self.angle)
+        self.rect = self.image.get_rect(center=self.position)
 
     def shoot(self):
         # Calculate direction toward player and constrain to 4 directions
@@ -159,12 +227,23 @@ class Enemy(pygame.sprite.Sprite):
                 angle = 90  # Up
         
         # Create beam
-        beam = Beam(self.position.x, self.position.y, angle)
+        beam = EnemyBeam(self.position.x, self.position.y, angle)
         all_sprites.add(beam)
-        beam_group.add(beam)
+        enemy_beam_group.add(beam)
 
     def update(self):
         self.chasing()
+        
+        # Check if hit by player beam
+        hit_beams = pygame.sprite.spritecollide(self, player_beam_group, False)
+        for beam in hit_beams:
+            beam.kill()
+            # Drop a healing item when enemy dies
+            item = HealingItem(self.position.x, self.position.y)
+            all_sprites.add(item)
+            item_group.add(item)
+            self.kill()
+            return
         
         # Handle shooting
         if self.shoot_cooldown <= 0:
@@ -173,8 +252,69 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.shoot_cooldown -= 1
 
-class Beam(pygame.sprite.Sprite):
-    def __init__(self, x,y, angle):
+
+class HealingItem(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        # Create a simple green healing item (circle)
+        self.image = pygame.Surface((24, 24), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, (0, 255, 0), (12, 12), 12)  # Green circle
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        self.position = pygame.math.Vector2(x, y)
+        self.heal_amount = 50
+    
+    def update(self):
+        # Check if player picks up the item
+        if pygame.sprite.spritecollide(self, [player1], False):
+            player1.health = min(player1.health + self.heal_amount, 100)  # Cap at 100
+            self.kill()
+
+class PlayerBeam(pygame.sprite.Sprite):
+    def __init__(self, x, y, angle):
+        super().__init__()
+        self.spritesheet = pygame.image.load("Beam.png").convert_alpha()
+        self.angle = angle
+        self.frame = 0
+        self.animation_speed = 0.15
+        self.frame_width = 32
+        self.frame_height = 32
+        # Calculate number of frames in sprite sheet
+        self.num_frames = self.spritesheet.get_width() // self.frame_width
+        self.update_image()
+        self.rect = self.image.get_rect()
+        self.x = x
+        self.y = y
+        self.rect.center = (self.x, self.y)
+        self.speed = 10
+        self.velocity = pygame.math.Vector2(self.speed, 0).rotate(-self.angle)
+    
+    def update_image(self):
+        # Extract frame from spritesheet
+        frame_x = int(self.frame % self.num_frames) * self.frame_width
+        frame_y = 0
+        frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
+        frame_image = self.spritesheet.subsurface(frame_rect).copy()
+        # Scale up 2x before rotating
+        frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
+        # Rotate the frame
+        self.image = pygame.transform.rotate(frame_image, self.angle)
+    
+    def beam_movement(self):
+        self.x += self.velocity.x
+        self.y += self.velocity.y
+        self.rect.center = (int(self.x), int(self.y))
+        
+        # Animate frames (loops automatically with modulo)
+        self.frame += self.animation_speed
+        self.update_image()
+
+    def update(self):
+        self.beam_movement()
+
+
+class EnemyBeam(pygame.sprite.Sprite):
+    def __init__(self, x, y, angle):
         super().__init__()
         self.spritesheet = pygame.image.load("Beam.png").convert_alpha()
         self.angle = angle
@@ -216,16 +356,30 @@ class Beam(pygame.sprite.Sprite):
         self.beam_movement()
 
 all_sprites = pygame.sprite.Group()
-beam_group = pygame.sprite.Group()
+player_beam_group = pygame.sprite.Group()
+enemy_beam_group = pygame.sprite.Group()
 enemy_group = pygame.sprite.Group()
 wall_group = pygame.sprite.Group()
+item_group = pygame.sprite.Group()
 player1 = Player()
 # Create enemy at random position (avoiding the edges)
 enemy_x = random.randint(50, 750)
 enemy_y = random.randint(50, 550)
 badguy = Enemy((enemy_x, enemy_y))
 
+# Enemy spawn timer
+enemy_spawn_timer = 0
+enemy_spawn_interval = 300  # 600 frames = 10 seconds at 60 FPS
+
 all_sprites.add(player1)
+
+def spawn_enemy():
+    """Spawn a new enemy at a random position"""
+    enemy_x = random.randint(50, 750)
+    enemy_y = random.randint(50, 550)
+    new_enemy = Enemy((enemy_x, enemy_y))
+    enemy_group.add(new_enemy)
+    all_sprites.add(new_enemy)
 
 # Create walls around the edges
 walls = [
@@ -239,18 +393,56 @@ for wall in walls:
     wall_group.add(wall)
 
 
+game_started = False
+game_over = False
 
 while True:
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
-    screen.blit(background, (0, 0))
-    screen.blit(player1.image, player1.rect)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                if not game_started:
+                    game_started = True
     
-    player1.update()
-    pygame.draw.rect(screen, (255, 0, 0), player1.hitbox, 2)
-    all_sprites.draw(screen)
-    all_sprites.update()
+    if not game_started:
+        # Display start screen
+        screen.fill((0, 0, 0))
+        font_large = pygame.font.Font(None, 72)
+        start_text = font_large.render("PRESS SPACE TO START", True, (255, 255, 255))
+        text_rect = start_text.get_rect(center=(400, 300))
+        screen.blit(start_text, text_rect)
+    elif game_over:
+        # Display game over screen
+        screen.fill((0, 0, 0))
+        font_large = pygame.font.Font(None, 72)
+        game_over_text = font_large.render("GAME OVER", True, (255, 0, 0))
+        text_rect = game_over_text.get_rect(center=(400, 300))
+        screen.blit(game_over_text, text_rect)
+    else:
+        screen.blit(background, (0, 0))
+        screen.blit(player1.image, player1.rect)
+        
+        player1.update()
+        pygame.draw.rect(screen, (255, 0, 0), player1.hitbox, 2)
+        all_sprites.draw(screen)
+        all_sprites.update()
+        
+        # Spawn timer logic
+        enemy_spawn_timer += 1
+        if enemy_spawn_timer >= enemy_spawn_interval:
+            spawn_enemy()
+            enemy_spawn_timer = 0
+        
+        # Check for game over
+        if player1.health <= 0:
+            game_over = True
+        
+        # Display health at the top
+        font = pygame.font.Font(None, 36)
+        health_text = font.render(f"Health: {player1.health}", True, (255, 255, 255))
+        screen.blit(health_text, (10, 10))
+    
     pygame.display.update()
     clock.tick(60)
