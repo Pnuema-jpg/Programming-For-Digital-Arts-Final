@@ -379,7 +379,7 @@ class HealingItem(pygame.sprite.Sprite):
     def update(self):
         # Check if player picks up the item
         if pygame.sprite.spritecollide(self, [player1], False):
-            player1.health = min(player1.health + self.heal_amount, 100)  # Cap at 100
+            player1.health = min(player1.health + self.heal_amount, 200)  # Cap at 200
             self.kill()
 
 class PowerUp(pygame.sprite.Sprite):
@@ -670,10 +670,16 @@ while True:
         if player1.health <= 0:
             game_over = True
         
-        # Display health at the top
-        font = pygame.font.Font(None, 36)
-        health_text = font.render(f"Health: {player1.health}", True, (255, 255, 255))
-        screen.blit(health_text, (10, 10))
+        # Display health bar at the top
+        bar_x, bar_y = 10, 10
+        bar_width, bar_height = 200, 24
+        health_ratio = min(player1.health / 200, 1.0)
+        # Draw background bar
+        pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_width, bar_height))
+        # Draw health amount
+        pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, int(bar_width * health_ratio), bar_height))
+        # Optional: draw border
+        pygame.draw.rect(screen, (255, 255, 255), (bar_x, bar_y, bar_width, bar_height), 2)
     
     # Boss spawn logic
     if strong_enemy_kills >= 5 and not boss_spawned:
