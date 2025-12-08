@@ -32,12 +32,15 @@ class Player(pygame.sprite.Sprite):
         self.speed = 2.5
         self.swordbeam_cooldown = 0
         self.swordbeam = False
+        self.angle = 0
+        self.velocity_x = 0
+        self.velocity_y = 0
 
     def player_rotate(self):
-        self.mouse_pos = pygame.mouse.get_pos()
-        self.x_change = self.mouse_pos[0] - self.pos.x
-        self.y_change = self.mouse_pos[1] - self.pos.y
-        self.angle = math.degrees(math.atan2(-self.y_change, self.x_change))
+        # Rotate based on movement direction from WASD
+        if self.velocity_x != 0 or self.velocity_y != 0:
+            self.angle = math.degrees(math.atan2(-self.velocity_y, self.velocity_x))
+        # If no movement, keep current angle
         self.image = pygame.transform.rotate(self.base_image, self.angle)
         self.rect = self.image.get_rect(center=self.hitbox.center)
     
