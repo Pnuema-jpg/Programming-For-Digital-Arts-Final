@@ -332,8 +332,8 @@ class StrongEnemy(pygame.sprite.Sprite):
             else:
                 angle = 90  # Up
         
-        # Create beam
-        beam = EnemyBeam(self.position.x, self.position.y, angle)
+        # Create 2x size beam
+        beam = StrongEnemyBeam(self.position.x, self.position.y, angle)
         all_sprites.add(beam)
         enemy_beam_group.add(beam)
 
@@ -408,6 +408,8 @@ class PlayerBeam(pygame.sprite.Sprite):
         self.frame_height = 32
         # Calculate number of frames in sprite sheet
         self.num_frames = self.spritesheet.get_width() // self.frame_width
+        # Get the current beam size multiplier from the player
+        self.size_multiplier = player1.beam_size_multiplier if hasattr(player1, 'beam_size_multiplier') else 1.0
         self.update_image()
         self.rect = self.image.get_rect()
         self.x = x
@@ -422,8 +424,9 @@ class PlayerBeam(pygame.sprite.Sprite):
         frame_y = 0
         frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
         frame_image = self.spritesheet.subsurface(frame_rect).copy()
-        # Scale up 2x before rotating
-        frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
+        # Scale up 2x and by the multiplier before rotating
+        scale = int(self.frame_width * 2 * self.size_multiplier), int(self.frame_height * 2 * self.size_multiplier)
+        frame_image = pygame.transform.scale(frame_image, scale)
         # Rotate the frame
         self.image = pygame.transform.rotate(frame_image, self.angle)
     
@@ -463,6 +466,7 @@ class EnemyBeam(pygame.sprite.Sprite):
         self.rect.center = (self.x, self.y)
         self.speed = 10
         self.velocity = pygame.math.Vector2(self.speed, 0).rotate(-self.angle)
+        self.damage = 10  # Default damage for enemy beams
     
     def update_image(self):
         # Extract frame from spritesheet
@@ -492,6 +496,38 @@ class EnemyBeam(pygame.sprite.Sprite):
         if self.rect.right < 0 or self.rect.left > 800 or self.rect.bottom < 0 or self.rect.top > 600:
             self.kill()
 
+class StrongEnemyBeam(EnemyBeam):
+    def __init__(self, x, y, angle):
+        super().__init__(x, y, angle)
+        self.damage = 15  # Stronger beam
+
+    def update_image(self):
+        frame_x = int(self.frame % self.num_frames) * self.frame_width
+        frame_y = 0
+        frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
+        frame_image = self.spritesheet.subsurface(frame_rect).copy()
+        frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
+        frame_image = shift_hue(frame_image, 120)
+        # 2x larger
+        frame_image = pygame.transform.scale(frame_image, (frame_image.get_width()*2, frame_image.get_height()*2))
+        self.image = pygame.transform.rotate(frame_image, self.angle)
+
+class BossBeam(EnemyBeam):
+    def __init__(self, x, y, angle):
+        super().__init__(x, y, angle)
+        self.damage = 20  # Boss beam deals double damage
+
+    def update_image(self):
+        frame_x = int(self.frame % self.num_frames) * self.frame_width
+        frame_y = 0
+        frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
+        frame_image = self.spritesheet.subsurface(frame_rect).copy()
+        frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
+        frame_image = shift_hue(frame_image, 120)
+        # 4x larger
+        frame_image = pygame.transform.scale(frame_image, (frame_image.get_width()*4, frame_image.get_height()*4))
+        self.image = pygame.transform.rotate(frame_image, self.angle)
+
 class BossEnemy(StrongEnemy):
     def __init__(self, pos):
         super().__init__(pos)
@@ -520,14 +556,6 @@ class BossEnemy(StrongEnemy):
         beam = BossBeam(self.position.x, self.position.y, angle)
         all_sprites.add(beam)
         enemy_beam_group.add(beam)
-
-class BossBeam(EnemyBeam):
-    def __init__(self, x, y, angle):
-        super().__init__(x, y, angle)
-        # 3x bigger than normal beam
-        self.image = pygame.transform.scale(self.image, (int(self.image.get_width()*1.5), int(self.image.get_height()*1.5)))
-        self.rect = self.image.get_rect(center=(x, y))
-        self.damage = 20  # 2x normal damage
 
 all_sprites = pygame.sprite.Group()
 player_beam_group = pygame.sprite.Group()
