@@ -18,6 +18,16 @@ clock = pygame.time.Clock()
 background = pygame.image.load("background.png").convert()
 
 
+class Wall(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height):
+        super().__init__()
+        self.image = pygame.Surface((width, height))
+        self.image.fill((0, 0, 0, 0))  # Transparent
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -75,6 +85,11 @@ class Player(pygame.sprite.Sprite):
     def move(self):
         self.pos += pygame.math.Vector2(self.velocity_x, self.velocity_y)
         self.hitbox.center = (round(self.pos.x), round(self.pos.y))
+        if pygame.sprite.spritecollide(self, wall_group, False):
+            # Undo vertical movement
+            self.pos.y -= self.velocity_y
+            self.hitbox.center = (round(self.pos.x), round(self.pos.y))
+        
         self.rect.center = self.hitbox.center
     def update(self):
         self.user_input()
@@ -82,6 +97,81 @@ class Player(pygame.sprite.Sprite):
         self.player_rotate()
         if self.swordbeam_cooldown > 0:
             self.swordbeam_cooldown -= 1
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, pos):
+        super().__init__(enemy_group, all_sprites)
+        self.image = pygame.image.load("enemy1.png").convert_alpha()
+        self.image = pygame.transform.rotozoom(self.image, 0, 1.5)
+        self.position = pygame.math.Vector2(pos)
+        self.rect = self.image.get_rect(center=self.position)
+        self.direction = pygame.math.Vector2()
+        self.velocity = pygame.math.Vector2()
+        self.speed = 2
+        self.shoot_cooldown = 0
+        self.shoot_interval = 60  # Shoot every 60 frames (1 second at 60 FPS)
+
+    def chasing(self):
+        # Calculate direction to player
+        player_vector = pygame.math.Vector2(player1.rect.center)
+        distance_vector = player_vector - self.position
+        
+        # Determine which direction is closest to the player (up, down, left, right)
+        abs_x = abs(distance_vector.x)
+        abs_y = abs(distance_vector.y)
+        
+        if abs_x > abs_y:
+            # Move left or right
+            if distance_vector.x > 0:
+                self.direction = pygame.math.Vector2(1, 0)  # Right
+            else:
+                self.direction = pygame.math.Vector2(-1, 0)  # Left
+        else:
+            # Move up or down
+            if distance_vector.y > 0:
+                self.direction = pygame.math.Vector2(0, 1)  # Down
+            else:
+                self.direction = pygame.math.Vector2(0, -1)  # Up
+        
+        self.velocity = self.direction * self.speed
+        self.position += self.velocity
+        self.rect.center = self.position
+
+    def shoot(self):
+        # Calculate direction toward player and constrain to 4 directions
+        player_vector = pygame.math.Vector2(player1.rect.center)
+        distance_vector = player_vector - self.position
+        
+        # Determine which direction is closest (up, down, left, right)
+        abs_x = abs(distance_vector.x)
+        abs_y = abs(distance_vector.y)
+        
+        if abs_x > abs_y:
+            # Shoot left or right
+            if distance_vector.x > 0:
+                angle = 0  # Right
+            else:
+                angle = 180  # Left
+        else:
+            # Shoot up or down
+            if distance_vector.y > 0:
+                angle = -90  # Down
+            else:
+                angle = 90  # Up
+        
+        # Create beam
+        beam = Beam(self.position.x, self.position.y, angle)
+        all_sprites.add(beam)
+        beam_group.add(beam)
+
+    def update(self):
+        self.chasing()
+        
+        # Handle shooting
+        if self.shoot_cooldown <= 0:
+            self.shoot()
+            self.shoot_cooldown = self.shoot_interval
+        else:
+            self.shoot_cooldown -= 1
 
 class Beam(pygame.sprite.Sprite):
     def __init__(self, x,y, angle):
@@ -125,12 +215,28 @@ class Beam(pygame.sprite.Sprite):
     def update(self):
         self.beam_movement()
 
-    
-player1 = Player()
-        
 all_sprites = pygame.sprite.Group()
 beam_group = pygame.sprite.Group()
+enemy_group = pygame.sprite.Group()
+wall_group = pygame.sprite.Group()
+player1 = Player()
+# Create enemy at random position (avoiding the edges)
+enemy_x = random.randint(50, 750)
+enemy_y = random.randint(50, 550)
+badguy = Enemy((enemy_x, enemy_y))
+
 all_sprites.add(player1)
+
+# Create walls around the edges
+walls = [
+    Wall(0, 0, 800, 20),      # Top wall
+    Wall(0, 580, 800, 20),    # Bottom wall
+    Wall(0, 0, 20, 600),      # Left wall
+    Wall(780, 0, 20, 600),    # Right wall
+]
+
+for wall in walls:
+    wall_group.add(wall)
 
 
 
