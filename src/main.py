@@ -593,6 +593,8 @@ def StrongEnemy_update_with_kill(self):
         strong_enemy_kills += 1
 StrongEnemy.update = StrongEnemy_update_with_kill
 
+win_screen = False
+
 while True:
     for event in pygame.event.get():
         if event.type == QUIT:
@@ -602,6 +604,10 @@ while True:
             if event.key == pygame.K_SPACE:
                 if not game_started:
                     game_started = True
+            if event.key == pygame.K_ESCAPE:
+                if win_screen:
+                    pygame.quit()
+                    sys.exit()
     
     if not game_started:
         # Display start screen
@@ -663,6 +669,28 @@ while True:
         if isinstance(sprite, BossBeam) and player1.rect.colliderect(sprite.rect):
             player1.health -= sprite.damage
             sprite.kill()
+
+    # WIN SCREEN: If boss is defeated
+    if boss_spawned and boss and not boss.alive():
+        win_screen = True
+
+    if win_screen:
+        screen.fill((0, 0, 0))
+        font_large = pygame.font.Font(None, 72)
+        win_text = font_large.render("YOU WIN!", True, (0, 255, 0))
+        text_rect = win_text.get_rect(center=(400, 250))
+        screen.blit(win_text, text_rect)
+        font_small = pygame.font.Font(None, 48)
+        esc_text = font_small.render("Press ESC to exit", True, (255, 255, 255))
+        esc_rect = esc_text.get_rect(center=(400, 350))
+        screen.blit(esc_text, esc_rect)
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
+        pygame.display.update()
+        clock.tick(60)
+        continue
 
     pygame.display.update()
     clock.tick(60)
