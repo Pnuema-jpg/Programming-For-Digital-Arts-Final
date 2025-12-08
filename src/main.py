@@ -492,6 +492,43 @@ class EnemyBeam(pygame.sprite.Sprite):
         if self.rect.right < 0 or self.rect.left > 800 or self.rect.bottom < 0 or self.rect.top > 600:
             self.kill()
 
+class BossEnemy(StrongEnemy):
+    def __init__(self, pos):
+        super().__init__(pos)
+        self.base_image = pygame.image.load("enemy3.png").convert_alpha()
+        self.base_image = pygame.transform.rotozoom(self.base_image, 0, 12.0)  # 4x larger than StrongEnemy (3.0)
+        self.image = self.base_image
+        self.rect = self.image.get_rect(center=self.position)
+        self.health = 10
+        self.shoot_interval = 40  # Shoots more frequently
+
+    def shoot(self):
+        player_vector = pygame.math.Vector2(player1.rect.center)
+        distance_vector = player_vector - self.position
+        abs_x = abs(distance_vector.x)
+        abs_y = abs(distance_vector.y)
+        if abs_x > abs_y:
+            if distance_vector.x > 0:
+                angle = 0
+            else:
+                angle = 180
+        else:
+            if distance_vector.y > 0:
+                angle = -90
+            else:
+                angle = 90
+        beam = BossBeam(self.position.x, self.position.y, angle)
+        all_sprites.add(beam)
+        enemy_beam_group.add(beam)
+
+class BossBeam(EnemyBeam):
+    def __init__(self, x, y, angle):
+        super().__init__(x, y, angle)
+        # 3x bigger than normal beam
+        self.image = pygame.transform.scale(self.image, (int(self.image.get_width()*1.5), int(self.image.get_height()*1.5)))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.damage = 20  # 2x normal damage
+
 all_sprites = pygame.sprite.Group()
 player_beam_group = pygame.sprite.Group()
 enemy_beam_group = pygame.sprite.Group()
@@ -539,6 +576,22 @@ for wall in walls:
 
 game_started = False
 game_over = False
+
+# Boss spawn logic
+boss_spawned = False
+boss = None
+boss_health_bar_font = pygame.font.Font(None, 36)
+strong_enemy_kills = 0
+
+# In StrongEnemy's update, increment strong_enemy_kills when killed
+StrongEnemy_update_original = StrongEnemy.update
+
+def StrongEnemy_update_with_kill(self):
+    StrongEnemy_update_original(self)
+    if not self.alive():
+        global strong_enemy_kills
+        strong_enemy_kills += 1
+StrongEnemy.update = StrongEnemy_update_with_kill
 
 while True:
     for event in pygame.event.get():
@@ -588,5 +641,28 @@ while True:
         health_text = font.render(f"Health: {player1.health}", True, (255, 255, 255))
         screen.blit(health_text, (10, 10))
     
+    # Boss spawn logic
+    if strong_enemy_kills >= 5 and not boss_spawned:
+        boss = BossEnemy((400, 150))
+        enemy_group.add(boss)
+        all_sprites.add(boss)
+        boss_spawned = True
+
+    # Draw boss health bar if boss is alive
+    if boss_spawned and boss and boss.alive():
+        bar_width = 400
+        bar_height = 24
+        health_ratio = boss.health / 10
+        pygame.draw.rect(screen, (60, 60, 60), (200, 50, bar_width, bar_height))
+        pygame.draw.rect(screen, (255, 0, 0), (200, 50, int(bar_width * health_ratio), bar_height))
+        text = boss_health_bar_font.render("BOSS", True, (255, 255, 255))
+        screen.blit(text, (200, 50 - 32))
+
+    # Boss beam deals double damage to player
+    for sprite in enemy_beam_group:
+        if isinstance(sprite, BossBeam) and player1.rect.colliderect(sprite.rect):
+            player1.health -= sprite.damage
+            sprite.kill()
+
     pygame.display.update()
     clock.tick(60)
