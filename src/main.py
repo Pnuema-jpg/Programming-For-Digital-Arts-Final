@@ -56,15 +56,15 @@ class Player(pygame.sprite.Sprite):
             self.velocity_y = 0
 
         if pygame.mouse.get_pressed() == (1, 0, 0):
-            self.swordbeam() == True
-            self.swordbeamexists = True
-        else :
-            self.swordbeam() == False
-    def swordbeamexists(self):
+            if self.swordbeam_cooldown == 0:
+                self.create_swordbeam()
+    
+    def create_swordbeam(self):
         if self.swordbeam_cooldown == 0:
-            self.swordbeam_cooldown = 20
-            beam_spawn = self.pos
-            self.beam = Beam(beam_spawn, )
+            self.swordbeam_cooldown = 50
+            self.beam = Beam(self.pos.x, self.pos.y, self.angle)
+            all_sprites.add(self.beam)
+            beam_group.add(self.beam)
 
     def move(self):
         self.pos += pygame.math.Vector2(self.velocity_x, self.velocity_y)
@@ -78,25 +78,42 @@ class Player(pygame.sprite.Sprite):
             self.swordbeam_cooldown -= 1
 
 class Beam(pygame.sprite.Sprite):
-    def __init__(self, pos, angle):
+    def __init__(self, x,y, angle):
         super().__init__()
-        self.image = pygame.image.load("Beam.png").convert_alpha()
-        self.image = pygame.transform.rotozoom(self.image,0,1)
+        self.spritesheet = pygame.image.load("Beam.png").convert_alpha()
+        self.angle = angle
+        self.frame = 0
+        self.animation_speed = 0.15
+        self.frame_width = 32
+        self.frame_height = 32
+        # Calculate number of frames in sprite sheet
+        self.num_frames = self.spritesheet.get_width() // self.frame_width
+        self.update_image()
         self.rect = self.image.get_rect()
         self.rect.center = (x,y)
         self.x = x
         self.y = y
-
         self.speed = 10
-        self.angle = angle
         self.velocity = pygame.math.Vector2(self.speed, 0).rotate(-self.angle)
+    
+    def update_image(self):
+        # Extract frame from spritesheet
+        frame_x = int(self.frame % self.num_frames) * self.frame_width
+        frame_y = 0
+        frame_rect = pygame.Rect(frame_x, frame_y, self.frame_width, self.frame_height)
+        frame_image = self.spritesheet.subsurface(frame_rect).copy()
+        # Rotate the frame
+        self.image = pygame.transform.rotate(frame_image, self.angle)
+    
     def beam_movement(self):
         self.x += self.velocity.x
         self.y += self.velocity.y
-
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
-
+        
+        # Animate frames (loops automatically with modulo)
+        self.frame += self.animation_speed
+        self.update_image()
 
     def update(self):
         self.beam_movement()
@@ -117,8 +134,10 @@ while True:
             sys.exit()
     screen.blit(background, (0, 0))
     screen.blit(player1.image, player1.rect)
+    
     player1.update()
     pygame.draw.rect(screen, (255, 0, 0), player1.hitbox, 2)
-    pygame.draw.rect(screen , (0, 255, 0), player1.rect, 2)
+    all_sprites.draw(screen)
+    all_sprites.update()
     pygame.display.update()
     clock.tick(60)
