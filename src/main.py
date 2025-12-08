@@ -257,8 +257,7 @@ class HealingItem(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         # Create a simple green healing item (circle)
-        self.image = pygame.Surface((24, 24), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, (0, 255, 0), (12, 12), 12)  # Green circle
+        self.image = pygame.image.load("Health.png").convert_alpha()
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
         self.position = pygame.math.Vector2(x, y)
