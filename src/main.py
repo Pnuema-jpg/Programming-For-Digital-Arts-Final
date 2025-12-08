@@ -92,6 +92,7 @@ class Player(pygame.sprite.Sprite):
         self.velocity_y = 0
         self.health = 100
         self.damage_cooldown = 0
+        self.beam_size_multiplier = 1.0  # 1.0 = normal size, 1.5 = 50% larger
 
     def player_rotate(self):
         # Rotate based on movement direction from WASD
@@ -238,8 +239,11 @@ class Enemy(pygame.sprite.Sprite):
         hit_beams = pygame.sprite.spritecollide(self, player_beam_group, False)
         for beam in hit_beams:
             beam.kill()
-            # Drop a healing item when enemy dies
-            item = HealingItem(self.position.x, self.position.y)
+            # Drop item when enemy dies (25% chance for PowerUp, 75% for Healing)
+            if random.random() < 0.25:
+                item = PowerUp(self.position.x, self.position.y)
+            else:
+                item = HealingItem(self.position.x, self.position.y)
             all_sprites.add(item)
             item_group.add(item)
             self.kill()
@@ -304,6 +308,11 @@ class PlayerBeam(pygame.sprite.Sprite):
         self.y += self.velocity.y
         self.rect.center = (int(self.x), int(self.y))
         
+        # Despawn if off-screen
+        if self.rect.right < 0 or self.rect.left > 800 or self.rect.bottom < 0 or self.rect.top > 600:
+            self.kill()
+            return
+        
         # Animate frames (loops automatically with modulo)
         self.frame += self.animation_speed
         self.update_image()
@@ -339,6 +348,8 @@ class EnemyBeam(pygame.sprite.Sprite):
         frame_image = self.spritesheet.subsurface(frame_rect).copy()
         # Scale up 2x before rotating
         frame_image = pygame.transform.scale(frame_image, (self.frame_width * 2, self.frame_height * 2))
+        # Apply hue shift (shift by 120 degrees for a cyan/teal color)
+        frame_image = shift_hue(frame_image, 120)
         # Rotate the frame
         self.image = pygame.transform.rotate(frame_image, self.angle)
     
@@ -353,6 +364,9 @@ class EnemyBeam(pygame.sprite.Sprite):
 
     def update(self):
         self.beam_movement()
+        # Despawn if off-screen
+        if self.rect.right < 0 or self.rect.left > 800 or self.rect.bottom < 0 or self.rect.top > 600:
+            self.kill()
 
 all_sprites = pygame.sprite.Group()
 player_beam_group = pygame.sprite.Group()
