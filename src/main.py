@@ -239,6 +239,9 @@ class Enemy(pygame.sprite.Sprite):
         hit_beams = pygame.sprite.spritecollide(self, player_beam_group, False)
         for beam in hit_beams:
             beam.kill()
+            # Increment enemy kill counter
+            global enemy_kills
+            enemy_kills += 1
             # Drop item when enemy dies (25% chance for PowerUp, 75% for Healing)
             if random.random() < 0.25:
                 item = PowerUp(self.position.x, self.position.y)
@@ -247,6 +250,112 @@ class Enemy(pygame.sprite.Sprite):
             all_sprites.add(item)
             item_group.add(item)
             self.kill()
+            return
+        
+        # Handle shooting
+        if self.shoot_cooldown <= 0:
+            self.shoot()
+            self.shoot_cooldown = self.shoot_interval
+        else:
+            self.shoot_cooldown -= 1
+
+
+class StrongEnemy(pygame.sprite.Sprite):
+    def __init__(self, pos):
+        super().__init__(enemy_group, all_sprites)
+        self.base_image = pygame.image.load("enemy2.png").convert_alpha()
+        self.base_image = pygame.transform.rotozoom(self.base_image, 0, 3.0)
+        self.image = self.base_image
+        self.position = pygame.math.Vector2(pos)
+        self.rect = self.image.get_rect(center=self.position)
+        self.direction = pygame.math.Vector2()
+        self.velocity = pygame.math.Vector2()
+        self.speed = 1.5  # Slightly slower than regular enemy
+        self.shoot_cooldown = 0
+        self.shoot_interval = 60  # Shoot every 60 frames (1 second at 60 FPS)
+        self.angle = 0
+        self.health = 3  # Takes 3 hits to kill
+
+    def chasing(self):
+        # Calculate direction to player
+        player_vector = pygame.math.Vector2(player1.rect.center)
+        distance_vector = player_vector - self.position
+        
+        # Determine which direction is closest to the player (up, down, left, right)
+        abs_x = abs(distance_vector.x)
+        abs_y = abs(distance_vector.y)
+        
+        if abs_x > abs_y:
+            # Move left or right
+            if distance_vector.x > 0:
+                self.direction = pygame.math.Vector2(1, 0)  # Right
+                self.angle = 0
+            else:
+                self.direction = pygame.math.Vector2(-1, 0)  # Left
+                self.angle = 180
+        else:
+            # Move up or down
+            if distance_vector.y > 0:
+                self.direction = pygame.math.Vector2(0, 1)  # Down
+                self.angle = -90
+            else:
+                self.direction = pygame.math.Vector2(0, -1)  # Up
+                self.angle = 90
+        
+        self.velocity = self.direction * self.speed
+        self.position += self.velocity
+        self.rect.center = self.position
+        
+        # Rotate sprite based on direction
+        self.image = pygame.transform.rotate(self.base_image, self.angle)
+        self.rect = self.image.get_rect(center=self.position)
+
+    def shoot(self):
+        # Calculate direction toward player and constrain to 4 directions
+        player_vector = pygame.math.Vector2(player1.rect.center)
+        distance_vector = player_vector - self.position
+        
+        # Determine which direction is closest (up, down, left, right)
+        abs_x = abs(distance_vector.x)
+        abs_y = abs(distance_vector.y)
+        
+        if abs_x > abs_y:
+            # Shoot left or right
+            if distance_vector.x > 0:
+                angle = 0  # Right
+            else:
+                angle = 180  # Left
+        else:
+            # Shoot up or down
+            if distance_vector.y > 0:
+                angle = -90  # Down
+            else:
+                angle = 90  # Up
+        
+        # Create beam
+        beam = EnemyBeam(self.position.x, self.position.y, angle)
+        all_sprites.add(beam)
+        enemy_beam_group.add(beam)
+
+    def update(self):
+        self.chasing()
+        
+        # Check if hit by player beam
+        hit_beams = pygame.sprite.spritecollide(self, player_beam_group, False)
+        for beam in hit_beams:
+            beam.kill()
+            self.health -= 1
+            if self.health <= 0:
+                # Drop item when enemy dies (25% chance for PowerUp, 75% for Healing)
+                global enemy_kills
+                enemy_kills += 1
+                if random.random() < 0.25:
+                    item = PowerUp(self.position.x, self.position.y)
+                else:
+                    item = HealingItem(self.position.x, self.position.y)
+                all_sprites.add(item)
+                item_group.add(item)
+                self.kill()
             return
         
         # Handle shooting
@@ -271,6 +380,21 @@ class HealingItem(pygame.sprite.Sprite):
         # Check if player picks up the item
         if pygame.sprite.spritecollide(self, [player1], False):
             player1.health = min(player1.health + self.heal_amount, 100)  # Cap at 100
+            self.kill()
+
+class PowerUp(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.image.load("Sword powerup.png").convert_alpha()
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        self.position = pygame.math.Vector2(x, y)
+        self.duration = 300  # Duration in frames (5 seconds at 60 FPS)
+    
+    def update(self):
+        # Check if player picks up the item
+        if pygame.sprite.spritecollide(self, [player1], False):
+            player1.beam_size_multiplier *= 1.5  # Multiply by 1.5x each pickup
             self.kill()
 
 class PlayerBeam(pygame.sprite.Sprite):
@@ -384,13 +508,20 @@ badguy = Enemy((enemy_x, enemy_y))
 enemy_spawn_timer = 0
 enemy_spawn_interval = 300  # 600 frames = 10 seconds at 60 FPS
 
+# Enemy kill counter for difficulty scaling
+enemy_kills = 0
+
 all_sprites.add(player1)
 
 def spawn_enemy():
     """Spawn a new enemy at a random position"""
     enemy_x = random.randint(50, 750)
     enemy_y = random.randint(50, 550)
-    new_enemy = Enemy((enemy_x, enemy_y))
+    # Spawn StrongEnemy after killing 5 enemies, otherwise spawn regular Enemy
+    if enemy_kills >= 5:
+        new_enemy = StrongEnemy((enemy_x, enemy_y))
+    else:
+        new_enemy = Enemy((enemy_x, enemy_y))
     enemy_group.add(new_enemy)
     all_sprites.add(new_enemy)
 
